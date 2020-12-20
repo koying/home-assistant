@@ -36,6 +36,7 @@ from homeassistant.helpers.typing import (
     HomeAssistantType,
 )
 import homeassistant.util.color as color_util
+from voluptuous.error import FalseInvalid
 
 from . import async_create_connect_hyperion_client, get_hyperion_unique_id
 from .const import (
@@ -68,6 +69,7 @@ KEY_EFFECT_SOLID = "Solid"
 KEY_ENTRY_ID_YAML = "YAML"
 
 DEFAULT_COLOR = [255, 255, 255]
+DEFAULT_COLOR_OFF = [0, 0, 0]
 DEFAULT_BRIGHTNESS = 255
 DEFAULT_EFFECT = KEY_EFFECT_SOLID
 DEFAULT_NAME = "Hyperion"
@@ -341,7 +343,15 @@ class HyperionLight(LightEntity):
     @property
     def is_on(self) -> bool:
         """Return true if not black."""
-        return bool(self._client.is_on()) and self._client.visible_priority is not None
+
+        if (not self._client.is_on([const.KEY_COMPONENTID_LEDDEVICE])):
+            return False
+
+        return (
+            self._client.visible_priority is not None 
+            and not self._client.visible_priority[const.KEY_COMPONENTID] in const.KEY_COMPONENTID_EXTERNAL_SOURCES
+            and self._client.visible_priority[const.KEY_VALUE][const.KEY_RGB] != DEFAULT_COLOR_OFF
+        )
 
     @property
     def icon(self) -> str:
@@ -358,7 +368,7 @@ class HyperionLight(LightEntity):
         """Return the list of supported effects."""
         return (
             self._effect_list
-            + list(const.KEY_COMPONENTID_EXTERNAL_SOURCES)
+            # + list(const.KEY_COMPONENTID_EXTERNAL_SOURCES)
             + [KEY_EFFECT_SOLID]
         )
 
@@ -390,16 +400,6 @@ class HyperionLight(LightEntity):
         # color, effect), but this is not possible due to:
         # https://github.com/hyperion-project/hyperion.ng/issues/967
         if not self.is_on:
-            if not await self._client.async_send_set_component(
-                **{
-                    const.KEY_COMPONENTSTATE: {
-                        const.KEY_COMPONENT: const.KEY_COMPONENTID_ALL,
-                        const.KEY_STATE: True,
-                    }
-                }
-            ):
-                return
-
             if not await self._client.async_send_set_component(
                 **{
                     const.KEY_COMPONENTSTATE: {
@@ -436,25 +436,25 @@ class HyperionLight(LightEntity):
                 return
 
         # == Set an external source
-        if effect and effect in const.KEY_COMPONENTID_EXTERNAL_SOURCES:
+        # if effect and effect in const.KEY_COMPONENTID_EXTERNAL_SOURCES:
 
-            # Clear any color/effect.
-            if not await self._client.async_send_clear(
-                **{const.KEY_PRIORITY: self._get_option(CONF_PRIORITY)}
-            ):
-                return
+        #     # Clear any color/effect.
+        #     if not await self._client.async_send_clear(
+        #         **{const.KEY_PRIORITY: self._get_option(CONF_PRIORITY)}
+        #     ):
+        #         return
 
-            # Turn off all external sources, except the intended.
-            for key in const.KEY_COMPONENTID_EXTERNAL_SOURCES:
-                if not await self._client.async_send_set_component(
-                    **{
-                        const.KEY_COMPONENTSTATE: {
-                            const.KEY_COMPONENT: key,
-                            const.KEY_STATE: effect == key,
-                        }
-                    }
-                ):
-                    return
+        #     # Turn off all external sources, except the intended.
+        #     for key in const.KEY_COMPONENTID_EXTERNAL_SOURCES:
+        #         if not await self._client.async_send_set_component(
+        #             **{
+        #                 const.KEY_COMPONENTSTATE: {
+        #                     const.KEY_COMPONENT: key,
+        #                     const.KEY_STATE: effect == key,
+        #                 }
+        #             }
+        #         ):
+        #             return
 
         # == Set an effect
         elif effect and effect != KEY_EFFECT_SOLID:
@@ -486,12 +486,11 @@ class HyperionLight(LightEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Disable the LED output component."""
-        if not await self._client.async_send_set_component(
+        if not await self._client.async_send_set_color(
             **{
-                const.KEY_COMPONENTSTATE: {
-                    const.KEY_COMPONENT: const.KEY_COMPONENTID_LEDDEVICE,
-                    const.KEY_STATE: False,
-                }
+                const.KEY_PRIORITY: self._get_option(CONF_PRIORITY),
+                const.KEY_COLOR: DEFAULT_COLOR_OFF,
+                const.KEY_ORIGIN: DEFAULT_ORIGIN,
             }
         ):
             return
@@ -505,13 +504,14 @@ class HyperionLight(LightEntity):
         """Set the internal state."""
         if brightness is not None:
             self._brightness = brightness
-        if rgb_color is not None:
+        if rgb_color is not None and rgb_color != DEFAULT_COLOR_OFF:
             self._rgb_color = rgb_color
         if effect is not None:
             self._effect = effect
             if effect == KEY_EFFECT_SOLID:
                 self._icon = ICON_LIGHTBULB
             elif effect in const.KEY_COMPONENTID_EXTERNAL_SOURCES:
+                self._effect = KEY_EFFECT_SOLID
                 self._icon = ICON_EXTERNAL_SOURCE
             else:
                 self._icon = ICON_EFFECT
@@ -539,7 +539,7 @@ class HyperionLight(LightEntity):
         if visible_priority:
             componentid = visible_priority.get(const.KEY_COMPONENTID)
             if componentid in const.KEY_COMPONENTID_EXTERNAL_SOURCES:
-                self._set_internal_state(rgb_color=DEFAULT_COLOR, effect=componentid)
+                self._set_internal_state(rgb_color=DEFAULT_COLOR_OFF, effect=componentid)
             elif componentid == const.KEY_COMPONENTID_EFFECT:
                 # Owner is the effect name.
                 # See: https://docs.hyperion-project.org/en/json/ServerInfo.html#priorities

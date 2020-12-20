@@ -20,3 +20,4 @@ SIGNAL_INSTANCES_UPDATED = f"{DOMAIN}_instances_updated_signal." "{}"
 SIGNAL_INSTANCE_REMOVED = f"{DOMAIN}_instance_removed_signal." "{}"
 
 TYPE_HYPERION_LIGHT = "hyperion_light"
+TYPE_HYPERION_SWITCH = "hyperion_switch"
