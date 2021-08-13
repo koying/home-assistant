@@ -8,7 +8,7 @@ import collections.abc
 from collections.abc import Generator, Iterable
 from contextlib import suppress
 from contextvars import ContextVar
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from functools import partial, wraps
 import json
 import logging
@@ -1254,10 +1254,25 @@ def timestamp_utc(value):
 
 def forgiving_as_timestamp(value):
     """Try to convert value to timestamp."""
-    try:
-        return dt_util.as_timestamp(value)
-    except (ValueError, TypeError):
-        return None
+    if isinstance(value, str):
+        dt_val = forgiving_as_datetime(value)
+        return dt_val.timestamp() if dt_val is not None else None
+    else:
+        try:
+            return dt_util.as_timestamp(value)
+        except (ValueError, TypeError):
+            return None
+
+
+def forgiving_as_datetime(value):
+    """Try to convert value to timestamp."""
+    ret = dt_util.parse_datetime(value)
+    if ret is None:
+        # Try to parse a time-only string
+        tm = dt_util.parse_time(value)
+        if tm is not None:
+            ret = datetime.combine(date.today(), tm, dt_util.DEFAULT_TIME_ZONE)
+    return ret
 
 
 def strptime(string, fmt):
@@ -1460,7 +1475,7 @@ class TemplateEnvironment(ImmutableSandboxedEnvironment):
         self.filters["atan"] = arc_tangent
         self.filters["atan2"] = arc_tangent2
         self.filters["sqrt"] = square_root
-        self.filters["as_datetime"] = dt_util.parse_datetime
+        self.filters["as_datetime"] = forgiving_as_datetime
         self.filters["as_timestamp"] = forgiving_as_timestamp
         self.filters["as_local"] = dt_util.as_local
         self.filters["timestamp_custom"] = timestamp_custom
@@ -1495,7 +1510,7 @@ class TemplateEnvironment(ImmutableSandboxedEnvironment):
         self.globals["atan"] = arc_tangent
         self.globals["atan2"] = arc_tangent2
         self.globals["float"] = forgiving_float
-        self.globals["as_datetime"] = dt_util.parse_datetime
+        self.globals["as_datetime"] = forgiving_as_datetime
         self.globals["as_local"] = dt_util.as_local
         self.globals["as_timestamp"] = forgiving_as_timestamp
         self.globals["relative_time"] = relative_time

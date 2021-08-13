@@ -1,5 +1,5 @@
 """Test Home Assistant template helper methods."""
-from datetime import datetime
+from datetime import datetime, date
 import math
 import random
 from unittest.mock import patch
@@ -540,6 +540,25 @@ def test_timestamp_local(hass):
 def test_as_datetime(hass, input):
     """Test converting a timestamp string to a date object."""
     expected = dt_util.parse_datetime(input)
+    if expected is not None:
+        expected = str(expected)
+
+    assert (
+        template.Template(f"{{{{ as_datetime('{input}') }}}}", hass).async_render()
+        == expected
+    )
+    assert (
+        template.Template(f"{{{{ '{input}' | as_datetime }}}}", hass).async_render()
+        == expected
+    )
+
+
+def test_as_datetime_time(hass):
+    """Test converting a time-only string to a date object."""
+    input = "8:45"
+    expected = datetime.combine(
+        date.today(), dt_util.parse_time(input), dt_util.DEFAULT_TIME_ZONE
+    )
     if expected is not None:
         expected = str(expected)
 
