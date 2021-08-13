@@ -1,5 +1,5 @@
 """Test Home Assistant template helper methods."""
-from datetime import datetime, date
+from datetime import date, datetime
 import math
 import random
 from unittest.mock import patch

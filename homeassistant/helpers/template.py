@@ -8,7 +8,7 @@ import collections.abc
 from collections.abc import Generator, Iterable
 from contextlib import suppress
 from contextvars import ContextVar
-from datetime import datetime, timedelta, date
+from datetime import date, datetime, timedelta
 from functools import partial, wraps
 import json
 import logging
@@ -1271,7 +1271,7 @@ def forgiving_as_datetime(value):
         # Try to parse a time-only string
         tm = dt_util.parse_time(value)
         if tm is not None:
-            ret = datetime.combine(date.today(), tm, dt_util.DEFAULT_TIME_ZONE)
+            ret = datetime.combine(date.today(), tm, None)
     return ret
 
 
