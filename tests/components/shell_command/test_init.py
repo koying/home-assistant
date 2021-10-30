@@ -75,34 +75,33 @@ async def test_template_render_no_template(mock_call, hass):
 
     await hass.services.async_call("shell_command", "test_service", blocking=True)
     await hass.async_block_till_done()
+    assert mock_call.call_count == 1
     cmd = mock_call.mock_calls[0][1][0]
 
-    assert mock_call.call_count == 1
     assert cmd == "ls /bin"
 
 
-@patch("homeassistant.components.shell_command.asyncio.create_subprocess_exec")
+@patch("homeassistant.components.shell_command.asyncio.create_subprocess_shell")
 async def test_template_render(mock_call, hass):
     """Ensure shell_commands with templates get rendered properly."""
-    hass.states.async_set("sensor.test_state", "Works")
+    hass.states.async_set("sensor.test_state", "/bin")
     mock_call.return_value = mock_process_creator(error=False)
     assert await async_setup_component(
         hass,
         shell_command.DOMAIN,
         {
             shell_command.DOMAIN: {
-                "test_service": ("ls /bin {{ states.sensor.test_state.state }}")
+                "test_service": ("ls {{ states.sensor.test_state.state }}")
             }
         },
     )
 
     await hass.services.async_call("shell_command", "test_service", blocking=True)
-
     await hass.async_block_till_done()
-    cmd = mock_call.mock_calls[0][1]
-
     assert mock_call.call_count == 1
-    assert ("ls", "/bin", "Works") == cmd
+    cmd = mock_call.mock_calls[0][1][0]
+
+    assert cmd == "ls /bin"
 
 
 @patch("homeassistant.components.shell_command.asyncio.create_subprocess_shell")

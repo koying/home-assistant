@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 from contextlib import suppress
 import logging
-import shlex
 
 import voluptuous as vol
 
@@ -28,55 +27,35 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the shell_command component."""
     conf = config.get(DOMAIN, {})
 
-    cache: dict[str, tuple[str, str | None, template.Template | None]] = {}
+    cache: dict[str, template.Template | None] = {}
 
     async def async_service_handler(service: ServiceCall) -> None:
         """Execute a shell command service."""
         cmd = conf[service.service]
 
         if cmd in cache:
-            prog, args, args_compiled = cache[cmd]
-        elif " " not in cmd:
-            prog = cmd
-            args = None
-            args_compiled = None
-            cache[cmd] = prog, args, args_compiled
+            exec_command = cache[cmd]
         else:
-            prog, args = cmd.split(" ", 1)
-            args_compiled = template.Template(args, hass)
-            cache[cmd] = prog, args, args_compiled
+            exec_command = template.Template(cmd, hass)
+            cache[cmd] = exec_command
 
-        if args_compiled:
+        if exec_command:
             try:
-                rendered_args = args_compiled.async_render(
+                rendered_command = exec_command.async_render(
                     variables=service.data, parse_result=False
                 )
             except TemplateError as ex:
                 _LOGGER.exception("Error rendering command template: %s", ex)
                 return
         else:
-            rendered_args = None
+            rendered_command = None
 
-        if rendered_args == args:
-            # No template used. default behavior
-
-            create_process = asyncio.create_subprocess_shell(
-                cmd,
-                stdin=None,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-        else:
-            # Template used. Break into list and use create_subprocess_exec
-            # (which uses shell=False) for security
-            shlexed_cmd = [prog] + shlex.split(rendered_args)
-
-            create_process = asyncio.create_subprocess_exec(
-                *shlexed_cmd,
-                stdin=None,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
+        create_process = asyncio.create_subprocess_shell(
+            rendered_command,
+            stdin=None,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
 
         process = await create_process
         try:
