@@ -12,6 +12,7 @@ from homeassistant.components.media_player.const import (
     DOMAIN,
     SUPPORT_PLAY,
     SUPPORT_PLAY_MEDIA,
+    SUPPORT_SELECT_SOUND_MODE,
     SUPPORT_SELECT_SOURCE,
     SUPPORT_TURN_OFF,
     SUPPORT_TURN_ON,
@@ -34,6 +35,7 @@ from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 _LOGGER = logging.getLogger(__name__)
 
 CONF_SOURCES = "sources"
+CONF_SOUND_MODES = "sound_modes"
 CONF_MAX_VOLUME = "max_volume"
 CONF_RECEIVER_MAX_VOLUME = "receiver_max_volume"
 
@@ -41,18 +43,7 @@ DEFAULT_NAME = "Onkyo Receiver"
 SUPPORTED_MAX_VOLUME = 100
 DEFAULT_RECEIVER_MAX_VOLUME = 80
 
-SUPPORT_ONKYO = (
-    SUPPORT_VOLUME_SET
-    | SUPPORT_VOLUME_MUTE
-    | SUPPORT_VOLUME_STEP
-    | SUPPORT_TURN_ON
-    | SUPPORT_TURN_OFF
-    | SUPPORT_SELECT_SOURCE
-    | SUPPORT_PLAY
-    | SUPPORT_PLAY_MEDIA
-)
-
-SUPPORT_ONKYO_WO_VOLUME = (
+SUPPORT_ONKYO_BASELINE = (
     SUPPORT_TURN_ON
     | SUPPORT_TURN_OFF
     | SUPPORT_SELECT_SOURCE
@@ -76,6 +67,23 @@ DEFAULT_SOURCES = {
     "fm": "Radio",
 }
 
+DEFAULT_SOUND_MODES = {
+    "stereo": "Stereo",
+    "direct": "Direct",
+    "surround": "Surround",
+    "film": "Film",
+    "musical": "Musical",
+    "orchestra": "Orchestra",
+    "unplugged": "Unplugged",
+    "studio-mix": "Studio Mix",
+    "tv-logic": "TV Logic",
+    "all-ch-stereo": "All channels Stereo",
+    "theater-dimensional": "Theatrical",
+    "dolby-surround": "Dolby Surround",
+    "dts-x": "DTS-X",
+    "neo-6-music": "Neo 6 Music",
+}
+
 DEFAULT_PLAYABLE_SOURCES = ("fm", "am", "tuner")
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
@@ -89,6 +97,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
             CONF_RECEIVER_MAX_VOLUME, default=DEFAULT_RECEIVER_MAX_VOLUME
         ): cv.positive_int,
         vol.Optional(CONF_SOURCES, default=DEFAULT_SOURCES): {cv.string: cv.string},
+        vol.Optional(CONF_SOUND_MODES, default=DEFAULT_SOUND_MODES): {cv.string: cv.string},
     }
 )
 
@@ -206,6 +215,7 @@ def setup_platform(
                 OnkyoDevice(
                     receiver,
                     config.get(CONF_SOURCES),
+                    config.get(CONF_SOUND_MODES),
                     name=config.get(CONF_NAME),
                     max_volume=config.get(CONF_MAX_VOLUME),
                     receiver_max_volume=config.get(CONF_RECEIVER_MAX_VOLUME),
@@ -223,6 +233,7 @@ def setup_platform(
                         "2",
                         receiver,
                         config.get(CONF_SOURCES),
+                        config.get(CONF_SOUND_MODES),
                         name=f"{config[CONF_NAME]} Zone 2",
                         max_volume=config.get(CONF_MAX_VOLUME),
                         receiver_max_volume=config.get(CONF_RECEIVER_MAX_VOLUME),
@@ -236,6 +247,7 @@ def setup_platform(
                         "3",
                         receiver,
                         config.get(CONF_SOURCES),
+                        config.get(CONF_SOUND_MODES),
                         name=f"{config[CONF_NAME]} Zone 3",
                         max_volume=config.get(CONF_MAX_VOLUME),
                         receiver_max_volume=config.get(CONF_RECEIVER_MAX_VOLUME),
@@ -246,7 +258,7 @@ def setup_platform(
     else:
         for receiver in eISCP.discover():
             if receiver.host not in KNOWN_HOSTS:
-                hosts.append(OnkyoDevice(receiver, config.get(CONF_SOURCES)))
+                hosts.append(OnkyoDevice(receiver, config.get(CONF_SOURCES), config.get(CONF_SOUND_MODES)))
                 KNOWN_HOSTS.append(receiver.host)
     add_entities(hosts, True)
 
@@ -258,6 +270,7 @@ class OnkyoDevice(MediaPlayerEntity):
         self,
         receiver,
         sources,
+        sound_modes,
         name=None,
         max_volume=SUPPORTED_MAX_VOLUME,
         receiver_max_volume=DEFAULT_RECEIVER_MAX_VOLUME,
@@ -284,9 +297,14 @@ class OnkyoDevice(MediaPlayerEntity):
         self._source_list = list(sources.values())
         self._source_mapping = sources
         self._reverse_mapping = {value: key for key, value in sources.items()}
+        self._current_sound_mode = None
+        self._sound_mode_list = list(sound_modes.values())
+        self._sound_mode_mapping = sound_modes
+        self._sound_mode_reverse_mapping = {value: key for key, value in sound_modes.items()}
         self._attributes = {}
         self._hdmi_out_supported = True
         self._audio_info_supported = True
+        self._audio_mode_supported = True
         self._video_info_supported = True
 
     def command(self, command):
@@ -340,12 +358,19 @@ class OnkyoDevice(MediaPlayerEntity):
             return
 
         sources = _parse_onkyo_payload(current_source_raw)
-
         for source in sources:
             if source in self._source_mapping:
                 self._current_source = self._source_mapping[source]
                 break
             self._current_source = "_".join(sources)
+
+        current_sound_mode_raw = self.command("listening-mode query")
+        sound_modes = _parse_onkyo_payload(current_sound_mode_raw)
+        for sound_mode in sound_modes:
+            if sound_mode in self._sound_mode_mapping:
+                self._current_sound_mode = self._sound_mode_mapping[sound_mode]
+                break
+            self._current_sound_mode = "_".join(sound_modes)
 
         if preset_raw and self._current_source.lower() == "radio":
             self._attributes[ATTR_PRESET] = preset_raw[1]
@@ -392,7 +417,11 @@ class OnkyoDevice(MediaPlayerEntity):
     @property
     def supported_features(self):
         """Return media player features that are supported."""
-        return SUPPORT_ONKYO
+        features = SUPPORT_ONKYO_BASELINE
+        features |= (SUPPORT_VOLUME_SET | SUPPORT_VOLUME_MUTE | SUPPORT_VOLUME_STEP)
+        if self._audio_mode_supported:
+            features |= SUPPORT_SELECT_SOUND_MODE
+        return features
 
     @property
     def source(self):
@@ -403,6 +432,16 @@ class OnkyoDevice(MediaPlayerEntity):
     def source_list(self):
         """List of available input sources."""
         return self._source_list
+
+    @property
+    def sound_mode(self):
+        """Return the current input source of the device."""
+        return self._current_sound_mode
+
+    @property
+    def sound_mode_list(self):
+        """List of available input sources."""
+        return self._sound_mode_list
 
     @property
     def extra_state_attributes(self):
@@ -451,6 +490,12 @@ class OnkyoDevice(MediaPlayerEntity):
         if source in self._source_list:
             source = self._reverse_mapping[source]
         self.command(f"input-selector {source}")
+
+    def select_sound_mode(self, sound_mode):
+        """Set the input source."""
+        if sound_mode in self._sound_mode_list:
+            sound_mode = self._sound_mode_reverse_mapping[sound_mode]
+        self.command(f"listening-mode {sound_mode}")
 
     def play_media(self, media_type, media_id, **kwargs):
         """Play radio station by preset number."""
@@ -510,6 +555,7 @@ class OnkyoDeviceZone(OnkyoDevice):
         zone,
         receiver,
         sources,
+        sound_modes,
         name=None,
         max_volume=SUPPORTED_MAX_VOLUME,
         receiver_max_volume=DEFAULT_RECEIVER_MAX_VOLUME,
@@ -517,7 +563,7 @@ class OnkyoDeviceZone(OnkyoDevice):
         """Initialize the Zone with the zone identifier."""
         self._zone = zone
         self._supports_volume = True
-        super().__init__(receiver, sources, name, max_volume, receiver_max_volume)
+        super().__init__(receiver, sources, sound_modes, name, max_volume, receiver_max_volume)
 
     def update(self):
         """Get the latest state from the device."""
@@ -572,9 +618,12 @@ class OnkyoDeviceZone(OnkyoDevice):
     @property
     def supported_features(self):
         """Return media player features that are supported."""
+        features = SUPPORT_ONKYO_BASELINE
         if self._supports_volume:
-            return SUPPORT_ONKYO
-        return SUPPORT_ONKYO_WO_VOLUME
+            features |= (SUPPORT_VOLUME_SET | SUPPORT_VOLUME_MUTE | SUPPORT_VOLUME_STEP)
+        if self._audio_mode_supported:
+            features |= SUPPORT_SELECT_SOUND_MODE
+        return features
 
     def turn_off(self):
         """Turn the media player off."""
