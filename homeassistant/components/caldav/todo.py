@@ -73,12 +73,21 @@ def _todo_item(resource: caldav.CalendarObjectResource) -> TodoItem | None:
         or (summary := get_attr_value(todo, "summary")) is None
     ):
         return None
+    dtstart: date | datetime | None = None
+    if dt_value := get_attr_value(todo, "dtstart"):
+        if isinstance(dt_value, datetime):
+            dtstart = dt_util.as_local(dt_value)
+        elif isinstance(dt_value, date):
+            dtstart = datetime.combine(dt_value, datetime.min.time())
+    if dtstart != None and datetime.timestamp(dtstart) > datetime.timestamp(datetime.now()):
+        return None
+
     due: date | datetime | None = None
-    if due_value := get_attr_value(todo, "due"):
-        if isinstance(due_value, datetime):
-            due = dt_util.as_local(due_value)
-        elif isinstance(due_value, date):
-            due = due_value
+    if dt_value := get_attr_value(todo, "due"):
+        if isinstance(dt_value, datetime):
+            due = dt_util.as_local(dt_value)
+        elif isinstance(dt_value, date):
+            due = dt_value
     return TodoItem(
         uid=uid,
         summary=summary,
