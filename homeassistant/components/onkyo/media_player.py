@@ -384,10 +384,10 @@ class OnkyoDevice(MediaPlayerEntity):
     @property
     def supported_features(self):
         """Return media player features that are supported."""
-        features = SUPPORT_ONKYO_WO_VOLUME
-        features |= (MediaPlayerEntityFeature.SUPPORT_VOLUME_SET | MediaPlayerEntityFeature.SUPPORT_VOLUME_MUTE | MediaPlayerEntityFeature.SUPPORT_VOLUME_STEP)
+        features = SUPPORT_ONKYO_BASELINE
+        features |= (MediaPlayerEntityFeature.VOLUME_SET | MediaPlayerEntityFeature.VOLUME_MUTE | MediaPlayerEntityFeature.VOLUME_STEP)
         if self._audio_mode_supported:
-            features |= MediaPlayerEntityFeature.SUPPORT_SELECT_SOUND_MODE
+            features |= MediaPlayerEntityFeature.SELECT_SOUND_MODE
         return features
 
     @property
@@ -575,9 +575,9 @@ class OnkyoDeviceZone(OnkyoDevice):
         """Return media player features that are supported."""
         features = SUPPORT_ONKYO_BASELINE
         if self._supports_volume:
-            features |= (MediaPlayerEntityFeature.SUPPORT_VOLUME_SET | MediaPlayerEntityFeature.SUPPORT_VOLUME_MUTE | MediaPlayerEntityFeature.SUPPORT_VOLUME_STEP)
+            features |= (MediaPlayerEntityFeature.VOLUME_SET | MediaPlayerEntityFeature.VOLUME_MUTE | MediaPlayerEntityFeature.VOLUME_STEP)
         if self._audio_mode_supported:
-            features |= MediaPlayerEntityFeature.SUPPORT_SELECT_SOUND_MODE
+            features |= MediaPlayerEntityFeature.SELECT_SOUND_MODE
         return features
 
     def turn_off(self) -> None:
