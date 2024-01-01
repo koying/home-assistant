@@ -156,7 +156,7 @@ class WebDavTodoListEntity(TodoListEntity):
         """Update a To-do item."""
         uid: str = cast(str, item.uid)
         try:
-            todo: Todo = await self.hass.async_add_executor_job(
+            todo: caldav.Todo = await self.hass.async_add_executor_job(
                 self._calendar.todo_by_uid, uid
             )
         except NotFoundError as err:
@@ -170,7 +170,6 @@ class WebDavTodoListEntity(TodoListEntity):
                 try:
                     await self.hass.async_add_executor_job(
                         partial(todo.complete, completion_timestamp=datetime.now()),
-
                     )
                 except (requests.ConnectionError, DAVError) as err:
                     raise HomeAssistantError(f"CalDAV complete error: {err}") from err
