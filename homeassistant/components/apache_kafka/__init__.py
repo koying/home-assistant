@@ -40,7 +40,7 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Required(CONF_TOPIC): cv.string,
                 vol.Optional(CONF_FILTER, default={}): FILTER_SCHEMA,
                 vol.Optional(CONF_SECURITY_PROTOCOL, default="PLAINTEXT"): vol.In(
-                    ["PLAINTEXT", "SASL_SSL"]
+                    ["PLAINTEXT", "SASL_SSL", "SASL_PLAINTEXT"]
                 ),
                 vol.Optional(CONF_USERNAME): cv.string,
                 vol.Optional(CONF_PASSWORD): cv.string,
@@ -96,7 +96,7 @@ class KafkaManager:
         port: int,
         topic: str,
         entities_filter: EntityFilter,
-        security_protocol: Literal["PLAINTEXT", "SASL_SSL"],
+        security_protocol: Literal["PLAINTEXT", "SASL_SSL", "SASL_PLAINTEXT"],
         username: str | None,
         password: str | None,
     ) -> None:
